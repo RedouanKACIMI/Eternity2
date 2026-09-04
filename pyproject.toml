@@ -1,0 +1,20 @@
+[project]
+name = "eternity2-solver"
+version = "0.1.0"
+description = "CP-SAT / ILP solver for reduced-scale Eternity-II-style edge-matching puzzles"
+requires-python = ">=3.10"
+dependencies = [
+    "ortools>=9.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+ilp = ["pulp>=2.8"]
+viz = ["matplotlib>=3.8", "pillow>=10.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
