@@ -8,7 +8,7 @@ their shared edge.
 This project follows up on a university Proseminar (TU Dortmund, WiSe
 2023/24) covering Burkardt & Garvie's ILP formulation for the original
 1999 Eternity Puzzle. **Full-size Eternity II (16x16, 256 pieces) is
-NP-hard and not the target here** -- this project targets reduced
+NP-hard and not the target here**, this project targets reduced
 instances (roughly 3x3 up to 8-10x10, depending on what each approach
 can actually solve in reasonable time) and reports honestly on where
 the approach breaks down.
@@ -28,7 +28,7 @@ pytest                          # generator + solver + verifier test suite
 
 ## Modeling approach (CP-SAT)
 
-This is a **pure feasibility problem** -- find any valid placement, or
+This is a **pure feasibility problem** --> find any valid placement, or
 prove none exists. There's no objective function, which is also why a
 successful solve reports `OPTIMAL`: with nothing to optimize, any
 feasible point is trivially optimal.
@@ -77,9 +77,9 @@ $$\sum_{p\in P}\sum_{k\in K} x_{r,c,p,k} = 1 \qquad \forall (r,c)\in R\times C$$
 $$\sum_{(r,c)\in R\times C}\sum_{k\in K} x_{r,c,p,k} = 1 \qquad \forall p\in P$$
 
 Together, (1) and (2) force $x$ to encode a bijection between pieces
-and cells -- no separate all-different constraint is needed.
+and cells (no separate all-different constraint is needed).
 
-**3. Channeling -- tie displayed colors to the chosen assignment.**
+**3. Channeling: tie displayed colors to the chosen assignment.**
 The code enforces this as an implication per assignment, via
 `OnlyEnforceIf`:
 
@@ -92,8 +92,7 @@ $$T_{r,c} = \sum_{p,k} t_p^k\, x_{r,c,p,k}, \quad \mathrm{Rt}_{r,c} = \sum_{p,k}
 
 CP-SAT's reification is a natural fit since it's SAT-based under the
 hood. CBC (the planned PuLP alternative) has no native reification
-primitive, so that model will use the weighted-sum form instead --
-same constraint, different syntax.
+primitive, so that model will use the weighted-sum form instead (same constraint, different syntax).
 
 **4. Border edges must show GRAY:**
 
@@ -109,11 +108,57 @@ $$B_{r,c} = T_{r+1,c} \quad \forall r\in\{0,\dots,n_r-2\},\ c\in C$$
 
 $|x| = M^2 \cdot 4 = 4M^2$ binary variables, plus 4 channeling
 equations per $x$ variable. For a square board of side $n$ ($M=n^2$):
-$4n^4$ variables and $16n^4$ constraints -- the concrete source of the
-CP-SAT blowup the benchmark phase will need to characterize.
+$4n^4$ variables and $16n^4$ constraints (the concrete source of the
+CP-SAT blowup the benchmark phase will need to characterize).
 
 See `src/eternity/solvers/cpsat_solver.py` for the implementation with
 inline commentary.
+
+## Benchmark results (CP-SAT, single seed)
+
+Ran on 3x3 through 10x10 boards, two color-count settings per size
+("tight": colors = n, "loose": colors = 2n), one seed each. Harness in
+`src/eternity/benchmark.py`; reproduce with
+`python scripts/run_benchmark.py` (writes `benchmark_results.csv`).
+
+| size | colors | status | solve time | verified |
+|---|---|---|---|---|
+| 3x3 | 3 (tight) | OPTIMAL | 0.04s | yes |
+| 3x3 | 6 (loose) | OPTIMAL | 0.02s | yes |
+| 4x4 | 4 (tight) | OPTIMAL | 0.05s | yes |
+| 4x4 | 8 (loose) | OPTIMAL | 0.04s | yes |
+| 5x5 | 5 (tight) | OPTIMAL | 0.48s | yes |
+| 5x5 | 10 (loose) | OPTIMAL | 0.09s | yes |
+| 6x6 | 6 (tight) | OPTIMAL | 1.71s | yes |
+| 6x6 | 12 (loose) | OPTIMAL | 0.15s | yes |
+| 7x7 | 7 (tight) | OPTIMAL | 23.56s | yes |
+| 7x7 | 14 (loose) | OPTIMAL | 0.46s | yes |
+| 8x8 | 8 (tight) | OPTIMAL | 10.72s | yes |
+| 8x8 | 16 (loose) | OPTIMAL | 1.43s | yes |
+| 9x9 | 9 (tight) | UNKNOWN (timed out) | 90.16s (cap) | -- |
+| 9x9 | 18 (loose) | OPTIMAL | 12.11s | yes |
+| 10x10 | 10 (tight) | UNKNOWN (timed out) | 60.41s (cap) | -- |
+| 10x10 | 20 (loose) | OPTIMAL | 15.42s | yes |
+
+**Takeaways:**
+
+- **Color count matters more than board size.** Tight instances
+  (colors = n) are consistently 5 to 50x slower than loose instances
+  (colors = 2n) at the same board size. Fewer colors means more pieces
+  look interchangeable to the solver, which blows up the search space
+  even though the board itself hasn't grown.
+- **The practical frontier for hard (tight) instances is around 8x8**
+  with this formulation, `num_workers=8`, and no symmetry breaking.
+  9x9 and 10x10 tight instances did not finish within their time caps.
+- **UNKNOWN here means "ran out of time," never "possibly
+  unsolvable."** Every instance is generated via reverse construction
+  (see `generator.py`), so a solution is guaranteed to exist: a
+  CP-SAT status of UNKNOWN on these instances is unambiguous: the
+  solver hasn't found it yet, full stop.
+- **7x7 tight (23.56s) took longer than 8x8 tight (10.72s).** single-seed timings are noisy, especially with CP-SAT's
+  parallel portfolio search. in a later benchmark pass I should run
+  multiple seeds per configuration and report medians, not single
+  points.
 
 ## Layout
 
@@ -122,14 +167,18 @@ src/eternity/
   model.py              # Piece, PuzzleInstance, rotation logic
   generator.py           # reverse-construction instance generator
   verify.py              # independent solution checker
+  benchmark.py           # sweep harness -> CSV
   solvers/
     cpsat_solver.py       # OR-Tools CP-SAT model
-scripts/solve_demo.py    # end-to-end smoke test
+scripts/
+  solve_demo.py           # end-to-end smoke test
+  run_benchmark.py        # runs the full benchmark sweep
 tests/                    # pytest suite
+benchmark_results.csv    # latest recorded sweep (3x3 - 10x10)
 ```
 
 ## Reference
 
-Burkardt, J., Garvie, M. -- ILP formulation for the 1999 Eternity
+Burkardt, J., Garvie, M. - ILP formulation for the 1999 Eternity
 Puzzle. (Full citation and discussion to be added in the final
 writeup.)
