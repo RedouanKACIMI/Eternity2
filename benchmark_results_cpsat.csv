@@ -1,0 +1,17 @@
+n_rows,n_cols,n_colors,seed,time_limit_s,solver,status,solve_time_s,verified
+3,3,3,1,30,cpsat,OPTIMAL,0.0405,True
+3,3,6,1,30,cpsat,OPTIMAL,0.0063,True
+4,4,4,1,30,cpsat,OPTIMAL,0.0180,True
+4,4,8,1,30,cpsat,OPTIMAL,0.0176,True
+5,5,5,1,30,cpsat,OPTIMAL,0.1505,True
+5,5,10,1,30,cpsat,OPTIMAL,0.0444,True
+6,6,6,1,30,cpsat,OPTIMAL,0.3509,True
+6,6,12,1,30,cpsat,OPTIMAL,0.0864,True
+7,7,7,1,60,cpsat,OPTIMAL,3.5753,True
+7,7,14,1,60,cpsat,OPTIMAL,0.2924,True
+8,8,8,1,60,cpsat,OPTIMAL,3.8596,True
+8,8,16,1,60,cpsat,OPTIMAL,1.5039,True
+9,9,9,1,90,cpsat,UNKNOWN,90.0536,
+9,9,18,1,90,cpsat,OPTIMAL,2.2952,True
+10,10,10,1,60,cpsat,UNKNOWN,60.2477,
+10,10,20,1,60,cpsat,OPTIMAL,3.0726,True

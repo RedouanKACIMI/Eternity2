@@ -8,7 +8,7 @@ their shared edge.
 This project follows up on a university Proseminar (TU Dortmund, WiSe
 2023/24) covering Burkardt & Garvie's ILP formulation for the original
 1999 Eternity Puzzle. **Full-size Eternity II (16x16, 256 pieces) is
-NP-hard and not the target here**, this project targets reduced
+NP-hard and not the target here**: this project targets reduced
 instances (roughly 3x3 up to 8-10x10, depending on what each approach
 can actually solve in reasonable time) and reports honestly on where
 the approach breaks down.
@@ -16,19 +16,21 @@ the approach breaks down.
 ## Setup
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,ilp]"
 ```
 
 ## Try it
 
 ```bash
-python scripts/solve_demo.py   # generate -> solve -> verify -> print, on a few small boards
-pytest                          # generator + solver + verifier test suite
+python scripts/solve_demo.py       # generate -> solve -> verify -> print, on a few small boards
+python scripts/run_benchmark.py    # CP-SAT sweep across sizes/color counts -> benchmark_results.csv
+python scripts/run_benchmark_ilp.py  # PuLP/CBC sweep (smaller range, see benchmark section)
+pytest                              # generator + both solvers + verifier test suite
 ```
 
 ## Modeling approach (CP-SAT)
 
-This is a **pure feasibility problem** --> find any valid placement, or
+This is a **pure feasibility problem**: find any valid placement, or
 prove none exists. There's no objective function, which is also why a
 successful solve reports `OPTIMAL`: with nothing to optimize, any
 feasible point is trivially optimal.
@@ -77,7 +79,7 @@ $$\sum_{p\in P}\sum_{k\in K} x_{r,c,p,k} = 1 \qquad \forall (r,c)\in R\times C$$
 $$\sum_{(r,c)\in R\times C}\sum_{k\in K} x_{r,c,p,k} = 1 \qquad \forall p\in P$$
 
 Together, (1) and (2) force $x$ to encode a bijection between pieces
-and cells (no separate all-different constraint is needed).
+and cells. No separate all-different constraint is needed.
 
 **3. Channeling: tie displayed colors to the chosen assignment.**
 The code enforces this as an implication per assignment, via
@@ -91,8 +93,9 @@ weighted-sum equation per cell:
 $$T_{r,c} = \sum_{p,k} t_p^k\, x_{r,c,p,k}, \quad \mathrm{Rt}_{r,c} = \sum_{p,k} r_p^k\, x_{r,c,p,k}, \quad B_{r,c} = \sum_{p,k} b_p^k\, x_{r,c,p,k}, \quad L_{r,c} = \sum_{p,k} l_p^k\, x_{r,c,p,k}$$
 
 CP-SAT's reification is a natural fit since it's SAT-based under the
-hood. CBC (the planned PuLP alternative) has no native reification
-primitive, so that model will use the weighted-sum form instead (same constraint, different syntax).
+hood. CBC (the PuLP/CBC alternative, below) has no native reification
+primitive, so that model uses the weighted-sum form instead: same
+constraint, different syntax.
 
 **4. Border edges must show GRAY:**
 
@@ -108,77 +111,158 @@ $$B_{r,c} = T_{r+1,c} \quad \forall r\in\{0,\dots,n_r-2\},\ c\in C$$
 
 $|x| = M^2 \cdot 4 = 4M^2$ binary variables, plus 4 channeling
 equations per $x$ variable. For a square board of side $n$ ($M=n^2$):
-$4n^4$ variables and $16n^4$ constraints (the concrete source of the
-CP-SAT blowup the benchmark phase will need to characterize).
+$4n^4$ variables and $16n^4$ constraints, the concrete source of the
+CP-SAT blowup the benchmark phase will need to characterize.
 
 See `src/eternity/solvers/cpsat_solver.py` for the implementation with
 inline commentary.
 
-## Benchmark results (CP-SAT, single seed)
+## Modeling approach (PuLP/CBC ILP)
 
-Ran on 3x3 through 10x10 boards, two color-count settings per size
-("tight": colors = n, "loose": colors = 2n), one seed each. Harness in
-`src/eternity/benchmark.py`; reproduce with
-`python scripts/run_benchmark.py` (writes `benchmark_results.csv`).
+Same variables, same five constraint groups as above:
+`src/eternity/solvers/ilp_solver.py` implements the identical model,
+just for a general-purpose ILP solver instead of a CP engine. Two real
+differences from the CP-SAT version:
 
-| size | colors | status | solve time | verified |
-|---|---|---|---|---|
-| 3x3 | 3 (tight) | OPTIMAL | 0.04s | yes |
-| 3x3 | 6 (loose) | OPTIMAL | 0.02s | yes |
-| 4x4 | 4 (tight) | OPTIMAL | 0.05s | yes |
-| 4x4 | 8 (loose) | OPTIMAL | 0.04s | yes |
-| 5x5 | 5 (tight) | OPTIMAL | 0.48s | yes |
-| 5x5 | 10 (loose) | OPTIMAL | 0.09s | yes |
-| 6x6 | 6 (tight) | OPTIMAL | 1.71s | yes |
-| 6x6 | 12 (loose) | OPTIMAL | 0.15s | yes |
-| 7x7 | 7 (tight) | OPTIMAL | 23.56s | yes |
-| 7x7 | 14 (loose) | OPTIMAL | 0.46s | yes |
-| 8x8 | 8 (tight) | OPTIMAL | 10.72s | yes |
-| 8x8 | 16 (loose) | OPTIMAL | 1.43s | yes |
-| 9x9 | 9 (tight) | UNKNOWN (timed out) | 90.16s (cap) | -- |
-| 9x9 | 18 (loose) | OPTIMAL | 12.11s | yes |
-| 10x10 | 10 (tight) | UNKNOWN (timed out) | 60.41s (cap) | -- |
-| 10x10 | 20 (loose) | OPTIMAL | 15.42s | yes |
+- **No reification.** Constraint 3 is written for CBC exactly as the
+  weighted-sum form already given:
+  `top[r,c] == sum_{p,k} t_p^k * x[r,c,p,k]`, and likewise for
+  right/bottom/left.
+- **No objective.** The problem is pure feasibility, so PuLP is given
+  a constant `0` objective. Because the objective never varies, CBC
+  recognizes zero optimality gap the moment it finds *any* feasible
+  integer solution, so on these instances "Optimal" and "first
+  solution found" happen at essentially the same moment.
 
-**Takeaways:**
+**On "closer to the academic paper": it isn't, and that's worth being
+precise about.** Burkardt & Garvie's ILP (see Reference) solves the
+*original 1999 Eternity Puzzle*, a geometric exact-cover problem
+where 209 uniquely-shaped "polydrafter" pieces (made of 30-60-90
+triangles) must exactly tile an irregular dodecagon. Their model has
+one binary variable per candidate (piece, orientation, position)
+placement and one linear equation per unit triangle of the region,
+requiring it to be covered exactly once. That's a different
+combinatorial structure from Eternity II's edge-matching puzzle: their
+constraint is "every unit of area is covered once," ours is "every
+shared edge shows the same color on both sides." One doesn't reduce to
+the other, so this project does not implement their formulation. What
+carries over is their *style*: a flat 0-1 ILP with explicit linear
+constraints, solved by a general-purpose solver (they used CPLEX; this
+project uses open-source CBC) rather than a CP-specific engine with
+reification.
 
-- **Color count matters more than board size.** Tight instances
-  (colors = n) are consistently 5 to 50x slower than loose instances
-  (colors = 2n) at the same board size. Fewer colors means more pieces
-  look interchangeable to the solver, which blows up the search space
-  even though the board itself hasn't grown.
-- **The practical frontier for hard (tight) instances is around 8x8**
-  with this formulation, `num_workers=8`, and no symmetry breaking.
-  9x9 and 10x10 tight instances did not finish within their time caps.
-- **UNKNOWN here means "ran out of time," never "possibly
-  unsolvable."** Every instance is generated via reverse construction
-  (see `generator.py`), so a solution is guaranteed to exist: a
-  CP-SAT status of UNKNOWN on these instances is unambiguous: the
-  solver hasn't found it yet, full stop.
-- **7x7 tight (23.56s) took longer than 8x8 tight (10.72s).** single-seed timings are noisy, especially with CP-SAT's
-  parallel portfolio search. in a later benchmark pass I should run
-  multiple seeds per configuration and report medians, not single
-  points.
+## Benchmark results
+
+Both solvers ran on the exact same reverse-constructed instances (same
+seed), so the two tables below are directly comparable. Harness in
+`src/eternity/benchmark.py`; reproduce with `python
+scripts/run_benchmark.py` and `python scripts/run_benchmark_ilp.py`
+(both write to `benchmark_results.csv`). All OPTIMAL/Optimal results
+below were verified independently via `verify.py`.
+
+### CP-SAT
+
+3x3 through 10x10, two color-count settings per size ("tight": colors
+= n, "loose": colors = 2n).
+
+| size | colors | status | solve time |
+|---|---|---|---|
+| 3x3 | 3 (tight) | OPTIMAL | 0.04s |
+| 3x3 | 6 (loose) | OPTIMAL | 0.02s |
+| 4x4 | 4 (tight) | OPTIMAL | 0.08s |
+| 4x4 | 8 (loose) | OPTIMAL | 0.04s |
+| 5x5 | 5 (tight) | OPTIMAL | 0.51s |
+| 5x5 | 10 (loose) | OPTIMAL | 0.10s |
+| 6x6 | 6 (tight) | OPTIMAL | 1.13s |
+| 6x6 | 12 (loose) | OPTIMAL | 0.12s |
+| 7x7 | 7 (tight) | OPTIMAL | 6.06s |
+| 7x7 | 14 (loose) | OPTIMAL | 0.38s |
+| 8x8 | 8 (tight) | OPTIMAL | 17.97s |
+| 8x8 | 16 (loose) | OPTIMAL | 1.12s |
+| 9x9 | 9 (tight) | UNKNOWN (timed out) | 90.06s (cap) |
+| 9x9 | 18 (loose) | OPTIMAL | 9.79s |
+| 10x10 | 10 (tight) | UNKNOWN (timed out) | 60.09s (cap) |
+| 10x10 | 20 (loose) | OPTIMAL | 13.10s |
+
+### PuLP/CBC ILP
+
+Same instances, 3x3 through 6x6. Extending further would just burn
+time on cases already known to time out (see takeaways).
+
+| size | colors | status | solve time |
+|---|---|---|---|
+| 3x3 | 3 (tight) | Optimal | 0.02s |
+| 3x3 | 6 (loose) | Optimal | 0.01s |
+| 4x4 | 4 (tight) | Optimal | 0.65s |
+| 4x4 | 8 (loose) | Optimal | 0.07s |
+| 5x5 | 5 (tight) | Optimal | 5.33s |
+| 5x5 | 10 (loose) | Optimal | 2.34s |
+| 6x6 | 6 (tight) | Not Solved (timed out) | 120.03s (cap) |
+| 6x6 | 12 (loose) | Optimal | 46.59s |
+
+### Takeaways
+
+- **CP-SAT dominates once problems are non-trivial, but not at the
+  very smallest sizes.** At 3x3, CBC was actually slightly *faster*
+  than CP-SAT (0.02s vs 0.04s tight). CP-SAT's parallel portfolio
+  search has fixed per-solve overhead (spinning up 8 worker threads)
+  that a trivial problem doesn't amortize. The crossover happens by
+  4x4, where CP-SAT is already about 8x faster, and the gap widens
+  fast: by 6x6 loose it's roughly 386x (0.12s vs 46.59s), and at 6x6
+  tight CBC didn't finish within its 120s cap at all, while CP-SAT
+  took 1.13s.
+- **Why:** this is a highly combinatorial assignment/matching problem
+  with a lot of symmetry (many pieces are interchangeable under the
+  "tight" color setting), and CP-SAT's SAT-based propagation is built
+  for exactly that: it prunes using logical inference across the
+  boolean channeling variables, not just an LP relaxation bound.
+  Classical branch-and-bound MIP solvers like CBC tend to do best when
+  the LP relaxation is tight; ours isn't, because "exactly one of
+  these many near-symmetric booleans is 1" gives a weak fractional
+  bound to branch on.
+- **Color count still matters more than board size for both solvers.**
+  Tight instances are consistently slower than loose ones at the
+  same size, for the same reason noted in the CP-SAT-only findings
+  from Phase 2.
+- **UNKNOWN (CP-SAT) and "Not Solved" (CBC) both mean "ran out of
+  time," never "possibly unsolvable."** Every instance is generated
+  via reverse construction (see `generator.py`), so a solution is
+  guaranteed to exist.
+- **Single-seed timings are noisy for both solvers.** Rerunning the
+  CP-SAT sweep for this comparison gave different absolute numbers
+  from the Phase 2 run (7x7 tight: 6.06s here vs. 23.56s before; 8x8
+  tight: 17.97s here vs. 10.72s before): same conclusions both
+  times, different numbers. A later benchmark pass should run
+  multiple seeds and report medians, not single points.
 
 ## Layout
 
 ```
 src/eternity/
-  model.py              # Piece, PuzzleInstance, rotation logic
-  generator.py           # reverse-construction instance generator
-  verify.py              # independent solution checker
-  benchmark.py           # sweep harness -> CSV
+  model.py                # Piece, PuzzleInstance, rotation logic
+  generator.py             # reverse-construction instance generator
+  verify.py                # independent solution checker
+  benchmark.py             # sweep harness -> CSV
   solvers/
-    cpsat_solver.py       # OR-Tools CP-SAT model
+    cpsat_solver.py         # OR-Tools CP-SAT model
+    ilp_solver.py            # PuLP/CBC ILP model
 scripts/
-  solve_demo.py           # end-to-end smoke test
-  run_benchmark.py        # runs the full benchmark sweep
-tests/                    # pytest suite
-benchmark_results.csv    # latest recorded sweep (3x3 - 10x10)
+  solve_demo.py             # end-to-end smoke test
+  run_benchmark.py          # CP-SAT sweep
+  run_benchmark_ilp.py      # PuLP/CBC sweep
+tests/                      # pytest suite
+benchmark_results.csv      # latest recorded sweep, both solvers
 ```
 
 ## Reference
 
-Burkardt, J., Garvie, M. - ILP formulation for the 1999 Eternity
-Puzzle. (Full citation and discussion to be added in the final
-writeup.)
+Burkardt, J., & Garvie, M. R. (2023). An integer linear programming
+approach to solving the Eternity Puzzle. *Theoretical Computer
+Science*, 975, 114138. https://doi.org/10.1016/j.tcs.2023.114138
+
+Their paper addresses the *original 1999 Eternity Puzzle*
+(Christopher Monckton's geometric tiling puzzle: 209 unique
+polydrafter pieces exactly covering an irregular dodecagon), not
+Eternity II's edge-matching puzzle, which is what this project
+implements. See "On 'closer to the academic paper'" above for exactly
+what does and doesn't carry over between the two.

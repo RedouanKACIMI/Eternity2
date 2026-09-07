@@ -3,6 +3,7 @@ import pytest
 from eternity.generator import generate_instance
 from eternity.model import GRAY, Piece
 from eternity.solvers.cpsat_solver import solve_cpsat
+from eternity.solvers.ilp_solver import solve_ilp
 from eternity.verify import verify_solution
 
 
@@ -35,6 +36,28 @@ def test_generated_instance_is_solvable_and_verifies(n_rows, n_cols, n_colors, s
 
     result = solve_cpsat(instance, time_limit_s=30.0)
     assert result.status in ("OPTIMAL", "FEASIBLE"), (
+        f"expected a solution for a by-construction-solvable {n_rows}x{n_cols} instance, "
+        f"got {result.status}"
+    )
+    ok, reason = verify_solution(instance, result.solution)
+    assert ok, reason
+
+
+@pytest.mark.parametrize(
+    "n_rows,n_cols,n_colors,seed",
+    [
+        (2, 2, 2, 1),
+        (3, 3, 2, 1),
+        (3, 3, 3, 7),
+        (4, 4, 4, 2),
+    ],
+)
+def test_ilp_solves_and_verifies(n_rows, n_cols, n_colors, seed):
+    # CBC is dramatically slower than CP-SAT on this formulation (see
+    # README benchmark section), kept small so the suite stays fast.
+    instance = generate_instance(n_rows, n_cols, n_colors, seed=seed)
+    result = solve_ilp(instance, time_limit_s=60.0)
+    assert result.status == "Optimal", (
         f"expected a solution for a by-construction-solvable {n_rows}x{n_cols} instance, "
         f"got {result.status}"
     )

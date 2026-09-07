@@ -1,11 +1,10 @@
-"""Benchmark harness for the CP-SAT solver.
+"""Benchmark harness for comparing solvers on the same instances.
 """
 import csv
 from dataclasses import dataclass
 from typing import List, Optional
 
 from .generator import generate_instance
-from .solvers.cpsat_solver import solve_cpsat
 from .verify import verify_solution
 
 
@@ -25,20 +24,28 @@ class BenchmarkRecord:
     n_colors: int
     seed: int
     time_limit_s: float
+    solver: str
     status: str
     solve_time_s: float
     verified: Optional[bool]
 
 
+def run_benchmark(
+    configs: List[BenchmarkConfig],
+    solve_fn,
+    solver_name: str,
+    verbose: bool = True,
+) -> List[BenchmarkRecord]:
+    """Run one solver across a set of configs.
 
-
-
-
-def run_benchmark(configs: List[BenchmarkConfig], verbose: bool = True) -> List[BenchmarkRecord]:
+    ``solve_fn`` must match the shape of ``solve_cpsat`` / ``solve_ilp``:
+    ``solve_fn(instance, time_limit_s=...)`` returning an object with
+    ``.status``, ``.solve_time_s``, and ``.solution`` attributes.
+    """
     records = []
     for cfg in configs:
         instance = generate_instance(cfg.n_rows, cfg.n_cols, cfg.n_colors, seed=cfg.seed)
-        result = solve_cpsat(instance, time_limit_s=cfg.time_limit_s)
+        result = solve_fn(instance, time_limit_s=cfg.time_limit_s)
 
         verified: Optional[bool] = None
         if result.solution is not None:
@@ -52,6 +59,7 @@ def run_benchmark(configs: List[BenchmarkConfig], verbose: bool = True) -> List[
                 n_colors=cfg.n_colors,
                 seed=cfg.seed,
                 time_limit_s=cfg.time_limit_s,
+                solver=solver_name,
                 status=result.status,
                 solve_time_s=result.solve_time_s,
                 verified=verified,
@@ -59,8 +67,8 @@ def run_benchmark(configs: List[BenchmarkConfig], verbose: bool = True) -> List[
         )
         if verbose:
             print(
-                f"{cfg.n_rows}x{cfg.n_cols}  colors={cfg.n_colors:<3} seed={cfg.seed}  "
-                f"-> {result.status:<10} in {result.solve_time_s:7.2f}s  verified={verified}"
+                f"[{solver_name}] {cfg.n_rows}x{cfg.n_cols}  colors={cfg.n_colors:<3} seed={cfg.seed}  "
+                f"-> {result.status:<12} in {result.solve_time_s:7.2f}s  verified={verified}"
             )
     return records
 
@@ -72,6 +80,7 @@ def write_csv(records: List[BenchmarkRecord], path: str) -> None:
         "n_colors",
         "seed",
         "time_limit_s",
+        "solver",
         "status",
         "solve_time_s",
         "verified",
@@ -87,6 +96,7 @@ def write_csv(records: List[BenchmarkRecord], path: str) -> None:
                     "n_colors": r.n_colors,
                     "seed": r.seed,
                     "time_limit_s": r.time_limit_s,
+                    "solver": r.solver,
                     "status": r.status,
                     "solve_time_s": f"{r.solve_time_s:.4f}",
                     "verified": r.verified,
