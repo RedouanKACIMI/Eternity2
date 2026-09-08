@@ -16,17 +16,40 @@ the approach breaks down.
 ## Setup
 
 ```bash
-pip install -e ".[dev,ilp]"
+pip install -e ".[dev,ilp,viz]"
 ```
 
 ## Try it
 
 ```bash
-python scripts/solve_demo.py       # generate -> solve -> verify -> print, on a few small boards
-python scripts/run_benchmark.py    # CP-SAT sweep across sizes/color counts -> benchmark_results.csv
+python scripts/solve_demo.py         # generate -> solve -> verify -> print, on a few small boards
+python scripts/run_benchmark.py      # CP-SAT sweep across sizes/color counts -> benchmark_results.csv
 python scripts/run_benchmark_ilp.py  # PuLP/CBC sweep (smaller range, see benchmark section)
-pytest                              # generator + both solvers + verifier test suite
+python scripts/render_examples.py    # render the example boards below into assets/
+pytest                                # generator + both solvers + verifier + renderer test suite
 ```
+
+## Visualization
+
+Each cell renders as a square split into four colored triangles (top,
+right, bottom, left), one per edge. In a correct solution every
+internal edge shows as a solid, unbroken diamond, since both triangles
+meeting there share the same color; a visible seam would mean an
+actual bug, not just a failed assertion in a test.
+
+![8x8 solved board](assets/solution_8x8.png)
+
+8x8, colors=8, seed=1: the same instance as the CP-SAT benchmark table
+below. Solve time varies run to run (see the noise takeaway further
+down); this particular run took 13.97s.
+
+An optional piece-ID overlay helps for stepping through a solution by
+hand, e.g. in an interview walkthrough:
+
+![4x4 solved board with piece IDs](assets/solution_4x4_labeled.png)
+
+Rendering is `render_solution()` in `src/eternity/visualize.py`;
+`python scripts/render_examples.py` regenerates both images above.
 
 ## Modeling approach (CP-SAT)
 
@@ -243,6 +266,7 @@ src/eternity/
   generator.py             # reverse-construction instance generator
   verify.py                # independent solution checker
   benchmark.py             # sweep harness -> CSV
+  visualize.py             # render solved boards to PNG
   solvers/
     cpsat_solver.py         # OR-Tools CP-SAT model
     ilp_solver.py            # PuLP/CBC ILP model
@@ -250,7 +274,9 @@ scripts/
   solve_demo.py             # end-to-end smoke test
   run_benchmark.py          # CP-SAT sweep
   run_benchmark_ilp.py      # PuLP/CBC sweep
+  render_examples.py        # regenerates assets/*.png
 tests/                      # pytest suite
+assets/                     # example rendered boards (used in this README)
 benchmark_results.csv      # latest recorded sweep, both solvers
 ```
 

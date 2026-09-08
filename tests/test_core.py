@@ -5,6 +5,7 @@ from eternity.model import GRAY, Piece
 from eternity.solvers.cpsat_solver import solve_cpsat
 from eternity.solvers.ilp_solver import solve_ilp
 from eternity.verify import verify_solution
+from eternity.visualize import render_solution
 
 
 def test_rotate_full_circle_returns_original():
@@ -83,3 +84,14 @@ def test_verifier_rejects_border_color_mismatch():
     ok, reason = verify_solution(instance, {(0, 0): (0, 0)})
     assert not ok
     assert "GRAY" in reason
+
+
+def test_render_solution_writes_a_nonempty_png(tmp_path):
+    instance = generate_instance(3, 3, 3, seed=1)
+    result = solve_cpsat(instance, time_limit_s=30.0)
+    assert result.solution is not None
+
+    out = tmp_path / "render.png"
+    render_solution(instance, result.solution, str(out), title="test", show_piece_ids=True)
+    assert out.exists()
+    assert out.stat().st_size > 0

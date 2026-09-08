@@ -1,9 +1,9 @@
 n_rows,n_cols,n_colors,seed,time_limit_s,solver,status,solve_time_s,verified
-3,3,3,1,30,ilp,Optimal,0.9589,True
-3,3,6,1,30,ilp,Optimal,0.0372,True
-4,4,4,1,60,ilp,Optimal,1.2140,True
-4,4,8,1,60,ilp,Optimal,0.0803,True
-5,5,5,1,90,ilp,Optimal,2.4123,True
-5,5,10,1,90,ilp,Optimal,1.2046,True
-6,6,6,1,120,ilp,Not Solved,120.0658,
-6,6,12,1,120,ilp,Optimal,34.3136,True
+3,3,3,1,30,ilp,Optimal,0.9529,True
+3,3,6,1,30,ilp,Optimal,0.0362,True
+4,4,4,1,60,ilp,Optimal,1.2606,True
+4,4,8,1,60,ilp,Optimal,0.0842,True
+5,5,5,1,90,ilp,Optimal,2.4416,True
+5,5,10,1,90,ilp,Optimal,1.2204,True
+6,6,6,1,120,ilp,Not Solved,120.0725,
+6,6,12,1,120,ilp,Optimal,34.2598,True
