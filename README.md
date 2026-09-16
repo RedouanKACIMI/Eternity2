@@ -3,15 +3,59 @@
 A constraint-satisfaction / ILP solver for reduced-scale instances of
 Eternity II-style edge-matching puzzles: square tiles with a color on
 each of the four edges, where adjacent tiles must match colors along
-their shared edge.
+their shared edge and border tiles show a neutral gray facing
+outward. Built as a portfolio project following a university
+Proseminar (TU Dortmund, WiSe 2023/24) on Burkardt & Garvie's ILP
+formulation for the original 1999 Eternity Puzzle.
 
-This project follows up on a university Proseminar (TU Dortmund, WiSe
-2023/24) covering Burkardt & Garvie's ILP formulation for the original
-1999 Eternity Puzzle. **Full-size Eternity II (16x16, 256 pieces) is
-NP-hard and not the target here**: this project targets reduced
-instances (roughly 3x3 up to 8-10x10, depending on what each approach
-can actually solve in reasonable time) and reports honestly on where
-the approach breaks down.
+## Background
+
+- **Eternity (1999).** Christopher Monckton's original puzzle: 209
+  irregularly-shaped "polydrafter" pieces (made of 30-60-90 triangles)
+  tiling a dodecagon board, with a £1 million prize. Solved within
+  about a year by Alex Selby and Oliver Riordan, who exploited
+  combinatorial weaknesses in the design. This is the puzzle Burkardt
+  & Garvie's ILP paper addresses (see Reference); it's a geometric
+  exact-cover problem, not an edge-color-matching one.
+- **Eternity II (2007).** Monckton recruited Selby and Riordan
+  themselves to design a successor meant to avoid those weaknesses:
+  256 square pieces on a 16x16 grid, each edge colored, border pieces
+  showing gray outward, rotation allowed but no reflection. A $2
+  million prize was offered for a solution by December 31, 2010. None
+  was found, the prize expired unclaimed, and Eternity II remains
+  unsolved. The best publicly known partial solutions match 467 of
+  480 edges: all but a handful of pieces placed correctly, with no
+  way to finish the rest.
+
+This project implements Eternity II's structure (square tiles,
+colored edges, rotation-only placement, gray borders), not the
+original's geometry. **Full-size Eternity II is well beyond what this
+or any general-purpose solver reaches**: the state of the art after
+close to two decades of dedicated effort is a near-miss, not a
+solution or a proof that none exists. So the goal here isn't "solved
+Eternity II," it's a correct, honestly-benchmarked solver for the same
+combinatorial structure at reduced scale (3x3 up to 8-10x10, per the
+benchmarks below), where completeness is actually achievable and
+provable.
+
+## What's here
+
+- Core data model, rotation logic, and a reverse-construction instance
+  generator that guarantees a solution exists (`model.py`,
+  `generator.py`)
+- An independent solution verifier, decoupled from both solvers
+  (`verify.py`)
+- A CP-SAT solver (OR-Tools) using boolean assignment variables and
+  channeled edge-color variables
+- A PuLP/CBC ILP solver: same feasibility model, no reification
+  (`ilp_solver.py`)
+- A benchmark harness with honestly-reported results: a single-seed
+  sweep, a multi-seed variance check, and a provably infeasible edge
+  case (`benchmark.py`, both CSVs)
+- Visualization: solved boards rendered as colored triangles, embedded
+  below
+- 19 passing tests covering generation, both solvers, verification,
+  rendering, and the infeasibility edge case
 
 ## Setup
 
@@ -135,7 +179,7 @@ $$B_{r,c} = T_{r+1,c} \quad \forall r\in\{0,\dots,n_r-2\},\ c\in C$$
 $|x| = M^2 \cdot 4 = 4M^2$ binary variables, plus 4 channeling
 equations per $x$ variable. For a square board of side $n$ ($M=n^2$):
 $4n^4$ variables and $16n^4$ constraints, the concrete source of the
-CP-SAT blowup the benchmark phase will need to characterize.
+CP-SAT blowup characterized in the benchmark results below.
 
 See `src/eternity/solvers/cpsat_solver.py` for the implementation with
 inline commentary.
@@ -332,9 +376,10 @@ Regression-tested in `tests/test_core.py`
   these many near-symmetric booleans is 1" gives a weak fractional
   bound to branch on.
 - **Color count still matters more than board size for both solvers.**
-  Tight instances are consistently slower than loose ones at the
-  same size, for the same reason noted in the CP-SAT-only findings
-  from Phase 2.
+  Tight instances are consistently slower than loose ones at the same
+  size: fewer colors means more pieces look interchangeable to the
+  solver, which blows up the search space regardless of which solver
+  is running it.
 - **UNKNOWN (CP-SAT) and "Not Solved" (CBC) both mean "ran out of
   time," never "possibly unsolvable."** Every instance is generated
   via reverse construction (see `generator.py`), so a solution is
