@@ -1,6 +1,6 @@
 import pytest
 
-from eternity.generator import generate_instance
+from eternity.generator import generate_instance, make_infeasible_instance
 from eternity.model import GRAY, Piece
 from eternity.solvers.cpsat_solver import solve_cpsat
 from eternity.solvers.ilp_solver import solve_ilp
@@ -95,3 +95,19 @@ def test_render_solution_writes_a_nonempty_png(tmp_path):
     render_solution(instance, result.solution, str(out), title="test", show_piece_ids=True)
     assert out.exists()
     assert out.stat().st_size > 0
+
+
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_cpsat_proves_infeasibility_not_timeout(n):
+    instance = make_infeasible_instance(n, n, n, seed=1)
+    result = solve_cpsat(instance, time_limit_s=30.0)
+    assert result.status == "INFEASIBLE"
+    assert result.solution is None
+
+
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_ilp_proves_infeasibility_not_timeout(n):
+    instance = make_infeasible_instance(n, n, n, seed=1)
+    result = solve_ilp(instance, time_limit_s=30.0)
+    assert result.status == "Infeasible"
+    assert result.solution is None

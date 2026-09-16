@@ -51,3 +51,26 @@ def generate_instance(
 
     pieces = tuple(Piece(id=i, edges=e) for i, e in enumerate(scrambled))
     return PuzzleInstance(n_rows=n_rows, n_cols=n_cols, pieces=pieces)
+
+
+def make_infeasible_instance(
+    n_rows: int,
+    n_cols: int,
+    n_colors: int,
+    seed: Optional[int] = None,
+) -> PuzzleInstance:
+
+    instance = generate_instance(n_rows, n_cols, n_colors, seed=seed)
+    pieces = list(instance.pieces)
+
+    for i, p in enumerate(pieces):
+        if GRAY in p.edges:
+            idx = p.edges.index(GRAY)
+            new_edges = list(p.edges)
+            new_edges[idx] = n_colors + 1  # a color that exists nowhere else in the instance
+            pieces[i] = Piece(id=p.id, edges=tuple(new_edges))
+            break
+    else:
+        raise AssertionError("expected at least one GRAY edge somewhere in a valid instance")
+
+    return PuzzleInstance(n_rows=n_rows, n_cols=n_cols, pieces=tuple(pieces))

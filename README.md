@@ -223,6 +223,94 @@ time on cases already known to time out (see takeaways).
 | 6x6 | 6 (tight) | Not Solved (timed out) | 120.03s (cap) |
 | 6x6 | 12 (loose) | Optimal | 46.59s |
 
+### Seed variance
+
+The two tables above use one seed per configuration, and it turned out
+those single numbers aren't trustworthy on their own. To find out how
+much they vary, three more seeds were run per size at the "tight"
+(colors = n) setting: 5x5 through 8x8 for CP-SAT, 3x3 through 5x5 for
+CBC. Raw data in `benchmark_variance.csv`.
+
+**CP-SAT (tight):**
+
+| size | min | median | max | spread (max/min) |
+|---|---|---|---|---|
+| 5x5 | 0.10s | 0.32s | 0.38s | 4.0x |
+| 6x6 | 0.92s | 0.96s | 0.98s | 1.1x |
+| 7x7 | 5.61s | 6.05s | 8.09s | 1.4x |
+| 8x8 | 11.28s | 50.79s | 141.86s | 12.6x |
+
+**PuLP/CBC (tight):**
+
+| size | min | median | max | spread (max/min) |
+|---|---|---|---|---|
+| 3x3 | 0.01s | 0.01s | 0.01s | 1.2x |
+| 4x4 | 0.03s | 0.57s | 0.92s | 31.3x |
+| 5x5 | 1.86s | 5.45s | 15.49s | 8.3x |
+
+The 8x8 CP-SAT row matters most: the single-seed table above shows
+17.97s, which reads like a comfortably solved size. Three more seeds
+ranged from 11s to 142s, and the slow one needed a 180s budget (three
+times the original 60s cap) before it finished. Every 8x8 tight
+instance tried did eventually solve, so 8x8 isn't actually beyond
+CP-SAT's reach, but "solves in about 18s" was never a fair
+characterization of the size; it was one sample from a wide
+distribution. CBC shows the same pattern even more sharply: a 31x
+spread at 4x4, on instances that only take a second either way. A
+single seed is not a reliable read on a configuration's difficulty,
+for either solver.
+
+### Infeasibility check
+
+`make_infeasible_instance()` (in `generator.py`) builds a provably
+infeasible instance without needing a solver run to confirm it: it
+takes a normal solvable instance and changes one GRAY edge on one
+piece to a color that appears nowhere else. A solvable n x n board
+needs exactly 4n GRAY edges spread across its pieces (one per
+border-facing slot); after the change there are only 4n - 1, so by a
+simple counting argument at least one border slot cannot end up GRAY,
+whatever arrangement is tried. That holds independent of solver
+internals, which makes it a good check that "no solution exists" gets
+reported correctly rather than confused with "ran out of time."
+
+**CP-SAT:**
+
+| size | status | time |
+|---|---|---|
+| 3x3 | INFEASIBLE | 0.02s |
+| 4x4 | INFEASIBLE | 0.02s |
+| 5x5 | INFEASIBLE | 0.07s |
+| 6x6 | INFEASIBLE | 0.20s |
+| 7x7 | INFEASIBLE | 0.36s |
+| 8x8 | INFEASIBLE | 1.27s |
+| 9x9 | INFEASIBLE | 9.24s |
+| 10x10 | INFEASIBLE | 12.86s |
+
+**PuLP/CBC** (tested at smaller sizes, matching its practical range):
+
+| size | status | time |
+|---|---|---|
+| 3x3 | Infeasible | 0.57s |
+| 4x4 | Infeasible | 0.02s |
+| 5x5 | Infeasible | 0.04s |
+
+Both solvers report the correct status at every size tested, never a
+timeout. Worth noting: proving infeasibility at 9x9 and 10x10 (9.24s,
+12.86s) is far faster than the single-seed *solvable* tight instances
+at those same sizes ever managed (they hit their 90s and 60s caps and
+came back UNKNOWN, see the CP-SAT table above). That's not a
+contradiction: "prove no valid tiling exists" and "find one specific
+valid tiling among an astronomically large space of near-misses" are
+different computational problems. This particular kind of
+infeasibility, a global counting/pigeonhole violation, is one
+CP-SAT's propagation catches quickly, well before it would need to
+explore anything like the search space a hard solvable instance
+requires.
+
+Regression-tested in `tests/test_core.py`
+(`test_cpsat_proves_infeasibility_not_timeout`,
+`test_ilp_proves_infeasibility_not_timeout`).
+
 ### Takeaways
 
 - **CP-SAT dominates once problems are non-trivial, but not at the
@@ -250,13 +338,15 @@ time on cases already known to time out (see takeaways).
 - **UNKNOWN (CP-SAT) and "Not Solved" (CBC) both mean "ran out of
   time," never "possibly unsolvable."** Every instance is generated
   via reverse construction (see `generator.py`), so a solution is
-  guaranteed to exist.
-- **Single-seed timings are noisy for both solvers.** Rerunning the
-  CP-SAT sweep for this comparison gave different absolute numbers
-  from the Phase 2 run (7x7 tight: 6.06s here vs. 23.56s before; 8x8
-  tight: 17.97s here vs. 10.72s before): same conclusions both
-  times, different numbers. A later benchmark pass should run
-  multiple seeds and report medians, not single points.
+  guaranteed to exist, and the separate infeasibility check above
+  confirms both solvers report genuine infeasibility distinctly from
+  a timeout when a solution truly doesn't exist.
+- **Single-seed timings understate the real variance, badly at some
+  sizes.** See the seed variance section above: a single 8x8 CP-SAT
+  sample can be off by more than 12x from another equally valid
+  sample at the identical size and color count. Any claim about
+  "where an approach breaks down" should be read as a rough band,
+  not a precise line, unless it's backed by multiple seeds.
 
 ## Layout
 
@@ -277,7 +367,8 @@ scripts/
   render_examples.py        # regenerates assets/*.png
 tests/                      # pytest suite
 assets/                     # example rendered boards (used in this README)
-benchmark_results.csv      # latest recorded sweep, both solvers
+benchmark_results.csv      # latest single-seed sweep, both solvers
+benchmark_variance.csv     # multi-seed variance check (see benchmark section)
 ```
 
 ## Reference
